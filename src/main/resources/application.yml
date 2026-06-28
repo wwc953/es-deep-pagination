@@ -1,0 +1,27 @@
+server:
+  port: 18080
+
+spring:
+  application:
+    name: es-deep-pagination
+
+  elasticsearch:
+    uris: localhost:9200
+    username:
+    password:
+    connection-timeout: 10s
+    socket-timeout: 30s
+
+# 深度分页配置
+deep-pagination:
+  # 默认最大分页大小
+  max-page-size: 100
+  # Scroll上下文保持时间
+  scroll-keep-alive-minutes: 5
+  # Search After PIT保持时间
+  pit-keep-alive-minutes: 2
+
+logging:
+  level:
+    root: INFO
+    org.elasticsearch.client: DEBUG

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"[System.IO.File]::ReadAllBytes\\('D:\\\\es-deep-pagination\\\\src\\\\main\\\\resources\\\\application.yml'\\)[0..2]\")",
+      "Bash(powershell -Command \"[System.Text.Encoding]::Default.GetString\\([System.IO.File]::ReadAllBytes\\('D:\\\\es-deep-pagination\\\\src\\\\main\\\\resources\\\\application.yml'\\)\\)\")",
+      "Bash(Select-String -Pattern \"00|0A|0D|20|23|3A|30-39|61-7A\" -SimpleMatch)",
+      "Bash(powershell -Command \"$bytes = [System.IO.File]::ReadAllBytes\\('D:\\\\es-deep-pagination\\\\src\\\\main\\\\resources\\\\application.yml'\\); $hex = \\($bytes | ForEach-Object { '{0:X2}' -f $_ }\\) -join ' '; $hex\")",
+      "Bash(powershell -Command \"Get-Content 'D:\\\\es-deep-pagination\\\\src\\\\main\\\\resources\\\\application.yml' -Encoding Byte | ForEach-Object { '{0:X2}' -f $_ }\")",
+      "Bash(powershell -Command \"[System.IO.File]::ReadAllText\\('D:\\\\es-deep-pagination\\\\src\\\\main\\\\resources\\\\application.yml', [System.Text.Encoding]::GetEncoding\\('GB2312'\\)\\)\")",
+      "Bash(powershell -Command \"[System.IO.File]::ReadAllText\\('D:\\\\es-deep-pagination\\\\src\\\\main\\\\resources\\\\application.yml', [System.Text.Encoding]::UTF8\\)\")",
+      "Bash(powershell -Command \"$content = Get-Content 'D:\\\\es-deep-pagination\\\\src\\\\main\\\\resources\\\\application.yml' -Raw; [System.IO.File]::WriteAllText\\('D:\\\\es-deep-pagination\\\\src\\\\main\\\\resources\\\\application.yml', $content, [System.Text.Encoding]::UTF8\\)\")",
+      "Bash(powershell -Command \"Test-Path 'D:\\\\es-deep-pagination\\\\target\\\\classes\\\\application.yml'\")",
+      "Bash(curl -s http://localhost:9200/)",
+      "Bash(curl:*)",
+      "Bash(mvn spring-boot:run -q)",
+      "Bash(findstr /i \"error\\\\|failed\\\\|success\\\\|started\\\\|initialized\")",
+      "Bash(more)"
+    ]
+  }
+}
