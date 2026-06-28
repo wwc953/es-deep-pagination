@@ -36,12 +36,10 @@ public class IndexController {
             return ResponseEntity.ok(result);
         }
 
-        // 创建索引
+        // 创建索引（包含向量字段映射）
         CreateIndexResponse response = elasticsearchClient.indices().create(c -> c
                         .index(indexName)
                         .mappings(m -> m
-//                        .properties("title", p -> p.text(t -> t.analyzer("ik_max_word")))
-//                        .properties("content", p -> p.text(t -> t.analyzer("ik_max_word")))
                                         .properties("title", p -> p.text(t -> t))
                                         .properties("content", p -> p.text(t -> t))
                                         .properties("category", p -> p.keyword(k -> k))
@@ -49,6 +47,12 @@ public class IndexController {
                                         .properties("status", p -> p.integer(i -> i))
                                         .properties("createTime", p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss")))
                                         .properties("updateTime", p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss")))
+                                        // 向量字段（用于混合搜索的 KNN 语义搜索）
+                                        .properties("titleVector", p -> p.denseVector(d -> d
+                                                .dims(768)
+                                                .similarity(co.elastic.clients.elasticsearch._types.mapping.DenseVectorSimilarity.Cosine)
+                                                .index(true)
+                                        ))
                         )
         );
 

@@ -30,4 +30,29 @@ public class DeepPaginationProperties {
      * 默认每页大小
      */
     private int defaultPageSize = 20;
+
+    /**
+     * 向量维度（默认768，适配BERT-base等模型）
+     */
+    private int vectorDimensions = 768;
+
+    /**
+     * KNN搜索的k值（返回top-k个最近邻）
+     */
+    private int knnK = 10;
+
+    /**
+     * KNN候选数量（越大越精确，性能越低）
+     */
+    private int knnNumCandidates = 100;
+
+    /**
+     * RRF窗口大小
+     */
+    private int rrfWindowSize = 50;
+
+    /**
+     * RRF排名常数
+     */
+    private int rrfRankConstant = 60;
 }

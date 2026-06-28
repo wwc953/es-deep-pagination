@@ -20,6 +20,16 @@ deep-pagination:
   scroll-keep-alive-minutes: 5
   # Search After PIT保持时间
   pit-keep-alive-minutes: 2
+  # 向量维度
+  vector-dimensions: 768
+  # KNN搜索的k值
+  knn-k: 10
+  # KNN候选数量
+  knn-num-candidates: 100
+  # RRF窗口大小
+  rrf-window-size: 50
+  # RRF排名常数
+  rrf-rank-constant: 60
 
 logging:
   level:
