@@ -12,7 +12,7 @@
 | **SCROLL** | 全量导出 | 高效遍历全部数据 | 实时性差，快照数据 |
 | **SEARCH_AFTER + PIT** | 深度分页（推荐） | 实时性好，性能稳定 | 需要客户端维护状态 |
 
-### 混合搜索（BM25 + KNN + RRF）
+### 混合搜索（BM25 + KNN + 应用层 RRF）
 
 在关键词搜索基础上新增向量语义搜索能力：
 
@@ -20,7 +20,7 @@
 |------|------|
 | **BM25 关键词搜索** | multiMatch 匹配 title^2 + content |
 | **KNN 向量语义搜索** | 基于 dense_vector 字段的近似最近邻搜索 |
-| **RRF 融合排序** | Reciprocal Rank Fusion 算法融合两种搜索结果 |
+| **应用层 RRF 融合** | 在 Java 代码中实现 Reciprocal Rank Fusion，无需 ES 付费许可 |
 | **可插拔 Embedding** | 自定义 `EmbeddingService` 实现，支持 OpenAI / Ollama / 本地模型 |
 | **深度分页** | Search After + PIT 支持无限翻页 |
 
@@ -131,7 +131,7 @@ curl -X DELETE http://localhost:18080/api/v1/pagination/pit/{pitId}
 
 **POST** `/api/v1/pagination/hybrid-search`
 
-结合关键词搜索与向量语义搜索，使用 RRF（Reciprocal Rank Fusion）融合排序。
+结合关键词搜索与向量语义搜索，在应用层使用 RRF（Reciprocal Rank Fusion）融合排序。
 
 **方式一：传入预计算向量**
 
@@ -234,6 +234,59 @@ curl -X DELETE http://localhost:18080/api/v1/pagination/pit/{pitId}
 | `updateTime` | date | 更新时间 |
 | `titleVector` | dense_vector (768维, cosine) | 标题向量（用于语义搜索） |
 
+## 混合搜索原理
+
+### 架构流程
+
+```
+┌─────────────────────────────────────────────────┐
+│               HybridSearchService                │
+│                                                  │
+│  ┌──────────────┐          ┌──────────────┐     │
+│  │  BM25 搜索   │          │  KNN 搜索    │     │
+│  │  (关键词)     │          │  (向量语义)  │     │
+│  │  top N 条    │          │  top N 条    │     │
+│  └──────┬───────┘          └──────┬───────┘     │
+│         │                         │              │
+│         ▼                         ▼              │
+│  ┌─────────────────────────────────────────┐    │
+│  │         RRF 融合 (应用层 Java)           │    │
+│  │                                          │    │
+│  │  score(doc) = 1/(rank_bm25 + k)         │    │
+│  │             + 1/(rank_knn  + k)         │    │
+│  │                                          │    │
+│  │  按 RRF score 降序排序 → 取 pageSize     │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+### RRF 公式
+
+```
+score(doc) = Σ 1 / (rank_i + k)
+```
+
+| 符号 | 含义 | 默认值 |
+|------|------|--------|
+| `rank_i` | 文档在第 i 路搜索中的排名（从 0 开始） | - |
+| `k` |排名常数，防止排名第一的文档权重过大 | 60 |
+
+**示例**：某文档在 BM25 中排第 2 名，在 KNN 中排第 5 名：
+
+```
+score = 1/(2+60) + 1/(5+60) = 0.0161 + 0.0154 = 0.0315
+```
+
+在两路搜索中都排名靠前的文档得分最高。
+
+### 为什么不用 ES 内置 rank.rrf
+
+| 对比 | ES 内置 rank.rrf | 应用层 RRF |
+|------|-----------------|------------|
+| **许可证** | 需要 Platinum/Enterprise | Basic 即可 |
+| **黑盒** | ES 内部实现，无法调参 | 代码透明，可调 |
+| **灵活性** | 固定算法 | 可自定义权重、扩展多路 |
+
 ## 配置说明
 
 `application.yml`：
@@ -249,18 +302,17 @@ deep-pagination:
   vector-dimensions: 768          # 向量维度（需与 EmbeddingService 输出维度一致）
   knn-k: 10                       # KNN 返回 top-k 个最近邻
   knn-num-candidates: 100         # KNN 候选数（越大越精确，性能越低）
-  rrf-window-size: 50             # RRF 窗口大小
-  rrf-rank-constant: 60           # RRF 排名常数
+  rrf-rank-constant: 60           # RRF 排名常数 k
 ```
 
-### RRF 参数调优
+### 参数调优
 
 | 参数 | 说明 | 建议 |
 |------|------|------|
 | `knn-k` | 向量搜索返回的结果数 | 10-50，越大召回率越高 |
 | `knn-num-candidates` | KNN 候选池大小 | 100-1000，越大精度越高 |
-| `rrf-window-size` | 参与融合的结果数 | 默认 50，覆盖两种搜索的 top 结果 |
-| `rrf-rank-constant` | 控制排名权重衰减 | 默认 60，越大高排名影响越小 |
+| `rrf-rank-constant` | RRF 公式中的 k 值 | 默认 60，越大高排名影响越小 |
+| `vector-dimensions` | 向量维度 | 需与 EmbeddingService 输出一致（常用 768/1536） |
 
 ## 自定义 EmbeddingService
 
@@ -409,3 +461,4 @@ async function exportAll() {
 4. **排序字段**：Search After 需要确保排序字段组合唯一，通常添加 `_doc` 作为 tiebreaker
 5. **向量维度**：`vector-dimensions` 配置需与 `EmbeddingService` 实际输出维度一致
 6. **混合搜索向量**：不传 `queryVector` 时需配置 `EmbeddingService` Bean，否则会返回 400 错误
+7. **应用层 RRF**：本项目的 RRF 在应用层实现，无需 ES Platinum/Enterprise 许可证

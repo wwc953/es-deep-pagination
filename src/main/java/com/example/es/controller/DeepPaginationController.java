@@ -7,6 +7,7 @@ import com.example.es.entity.Document;
 import com.example.es.service.DeepPaginationService;
 import com.example.es.service.EmbeddingService;
 import com.example.es.service.HybridSearchService;
+import com.example.es.service.HybridSearchServiceSelf;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,9 @@ public class DeepPaginationController {
 
     @Autowired
     private HybridSearchService hybridSearchService;
+
+    @Autowired
+    private HybridSearchServiceSelf hybridSearchServiceSelf;
 
     @Autowired(required = false)
     private EmbeddingService embeddingService;
@@ -165,6 +169,7 @@ public class DeepPaginationController {
      * 混合搜索（BM25 + KNN + RRF）
      *
      * 结合关键词搜索与向量语义搜索，使用 RRF（Reciprocal Rank Fusion）融合排序
+     *  ES 8.14 之前，RRF 曾在 Basic 版本中可用（后来被列入付费功能）
      *
      * 示例请求：
      * POST /api/v1/pagination/hybrid-search
@@ -200,6 +205,32 @@ public class DeepPaginationController {
         }
 
         PageResult<Document> result = hybridSearchService.hybridSearch(request);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/hybrid-search-self")
+    public ResponseEntity<PageResult<Document>> hybridSearchSelf(@Valid @RequestBody HybridSearchRequest request) {
+        log.info("混合搜索请求: index={}, keyword={}, hasVector={}",
+                request.getIndex(), request.getKeyword(), request.getQueryVector() != null);
+
+        // 若未提供 queryVector，使用 EmbeddingService 服务端计算
+        if (request.getQueryVector() == null && request.getKeyword() != null && !request.getKeyword().isEmpty()) {
+            if (embeddingService == null) {
+                return ResponseEntity.badRequest().body(
+                        PageResult.<Document>builder()
+                                .errorMsg("未提供queryVector且未配置EmbeddingService，请提供queryVector或配置EmbeddingService实现")
+                                .build()
+                );
+            }
+            float[] vector = embeddingService.embed(request.getKeyword());
+            List<Float> vectorList = new ArrayList<>();
+            for (float f : vector) {
+                vectorList.add(f);
+            }
+            request.setQueryVector(vectorList);
+        }
+
+        PageResult<Document> result = hybridSearchServiceSelf.hybridSearch(request);
         return ResponseEntity.ok(result);
     }
 
