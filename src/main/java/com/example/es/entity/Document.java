@@ -2,6 +2,7 @@ package com.example.es.entity;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -40,5 +41,28 @@ public class Document {
     @JsonIgnore
     private List<Float> titleVector;
 
+    /**
+     * 地理位置坐标（映射 ES geo_point）
+     */
+    private GeoPoint location;
+
+    /**
+     * 到查询中心点的距离（单位：米）
+     * 由查询结果动态填充，不持久化到 ES
+     */
+    private Double distance;
+
     private Map<String, Object> metadata;
+
+    /**
+     * 地理坐标点
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class GeoPoint {
+        private Double lat;
+        private Double lon;
+    }
 }

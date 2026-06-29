@@ -24,6 +24,18 @@
 | **可插拔 Embedding** | 自定义 `EmbeddingService` 实现，支持 OpenAI / Ollama / 本地模型 |
 | **深度分页** | Search After + PIT 支持无限翻页 |
 
+### 地理距离搜索
+
+基于 Elasticsearch 原生 `geo_distance` 查询，根据经纬度坐标查询指定半径范围内的数据：
+
+| 能力 | 说明 |
+|------|------|
+| **geo_distance 查询** | 精确圆形范围搜索，ES 内部自动使用 bounding box 预过滤 + 精确距离计算 |
+| **默认 500 米** | 不传 radius 时默认查询周围 500 米数据 |
+| **组合过滤** | 支持关键词、分类、状态等条件组合过滤 |
+| **距离排序** | 默认按距离升序（最近的排在前面），可选按创建时间排序 |
+| **返回距离** | 每条结果包含 `distance` 字段（单位：米），方便前端展示 |
+
 ## 技术栈
 
 - Spring Boot 3.3.1
@@ -174,21 +186,67 @@ curl -X DELETE http://localhost:18080/api/v1/pagination/pit/{pitId}
 
 ---
 
+### 地理距离搜索接口
+
+---
+
+#### 7. 附近搜索（POST 方式）
+
+**POST** `/api/v1/geo/nearby`
+
+根据经纬度坐标查询周围指定半径范围内的数据，支持关键词、分类、状态组合过滤。
+
+```json
+{
+  "index": "documents",
+  "lat": 39.9042,
+  "lon": 116.4074,
+  "distance": 500,
+  "keyword": "测试",
+  "category": "tech",
+  "status": 1,
+  "pageSize": 20,
+  "pageNum": 1,
+  "sortOrder": "DISTANCE_ASC"
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `index` | String | 是 | - | 索引名称 |
+| `lat` | Double | 是 | - | 中心点纬度（-90 ~ 90） |
+| `lon` | Double | 是 | - | 中心点经度（-180 ~ 180） |
+| `distance` | Double | 否 | 500 | 搜索半径（米） |
+| `keyword` | String | 否 | - | 关键词过滤 |
+| `category` | String | 否 | - | 分类过滤 |
+| `status` | Integer | 否 | - | 状态过滤 |
+| `pageSize` | Integer | 否 | 20 | 每页大小 |
+| `pageNum` | Integer | 否 | 1 | 页码 |
+| `sortOrder` | String | 否 | DISTANCE_ASC | 排序：`DISTANCE_ASC`（距离升序）/ `CREATE_TIME_DESC`（时间降序） |
+
+#### 8. 附近搜索（GET 简化版）
+
+**GET** `/api/v1/geo/nearby?index=documents&lat=39.9042&lon=116.4074&distance=500&pageSize=20`
+
+参数与 POST 方式相同，通过 QueryString 传递。
+
+---
+
 ### 索引管理接口
 
 ---
 
-#### 7. 创建索引
+#### 9. 创建索引
 
 **POST** `/api/v1/index/create/{indexName}`
 
 创建包含向量字段映射的索引。
 
-#### 8. 删除索引
+#### 10. 删除索引
 
 **DELETE** `/api/v1/index/{indexName}`
 
-#### 9. 检查索引是否存在
+#### 11. 检查索引是否存在
 
 **GET** `/api/v1/index/exists/{indexName}`
 
@@ -220,6 +278,33 @@ curl -X DELETE http://localhost:18080/api/v1/pagination/pit/{pitId}
 
 > 注意：响应中不包含 `titleVector` 字段（已通过 `@JsonIgnore` 和 `_source` 过滤双重排除）。
 
+### 地理距离搜索响应示例
+
+```json
+{
+  "data": [
+    {
+      "id": "abc123",
+      "title": "测试文档标题-1",
+      "content": "这是第 1 条测试文档的内容...",
+      "category": "tech",
+      "author": "张三",
+      "status": 1,
+      "createTime": "2024-01-01T00:00:00",
+      "location": { "lat": 39.9045, "lon": 116.4071 },
+      "distance": 125.5
+    }
+  ],
+  "total": 42,
+  "pageNum": 1,
+  "pageSize": 20,
+  "hasNext": true,
+  "costTime": 8
+}
+```
+
+> 注意：`distance` 字段单位为米，表示该文档到查询中心点的距离。
+
 ## 数据模型
 
 | 字段 | ES 类型 | 说明 |
@@ -233,6 +318,8 @@ curl -X DELETE http://localhost:18080/api/v1/pagination/pit/{pitId}
 | `createTime` | date | 创建时间 |
 | `updateTime` | date | 更新时间 |
 | `titleVector` | dense_vector (768维, cosine) | 标题向量（用于语义搜索） |
+| `location` | geo_point | 地理位置坐标（用于距离搜索） |
+| `distance` | - | 到查询中心点的距离（米），由查询结果动态填充，不持久化到 ES |
 
 ## 混合搜索原理
 
@@ -405,6 +492,55 @@ const nextResponse = await fetch('/api/v1/pagination/hybrid-search', {
 });
 ```
 
+### 地理距离搜索
+
+```javascript
+// 查询指定坐标周围 500 米的数据
+async function searchNearby(lat, lon, distance = 500) {
+  const response = await fetch(
+    `/api/v1/geo/nearby?index=documents&lat=${lat}&lon=${lon}&distance=${distance}&pageSize=20`
+  );
+  const result = await response.json();
+  // 每条数据包含 distance 字段（单位：米）
+  result.data.forEach(doc => {
+    console.log(`${doc.title} - 距您 ${doc.distance.toFixed(1)} 米`);
+  });
+  return result;
+}
+
+// 使用navigator.geolocation获取用户当前位置
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const { latitude, longitude } = position.coords;
+      searchNearby(latitude, longitude, 500);
+    },
+    (error) => {
+      console.error('获取位置失败:', error);
+    }
+  );
+}
+```
+
+POST 方式（支持更多过滤条件）：
+
+```javascript
+const response = await fetch('/api/v1/geo/nearby', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    index: 'documents',
+    lat: 39.9042,
+    lon: 116.4074,
+    distance: 500,
+    keyword: '测试',
+    category: 'tech',
+    sortOrder: 'DISTANCE_ASC'
+  })
+});
+const result = await response.json();
+```
+
 ### Scroll 模式全量导出
 
 ```javascript
@@ -462,3 +598,5 @@ async function exportAll() {
 5. **向量维度**：`vector-dimensions` 配置需与 `EmbeddingService` 实际输出维度一致
 6. **混合搜索向量**：不传 `queryVector` 时需配置 `EmbeddingService` Bean，否则会返回 400 错误
 7. **应用层 RRF**：本项目的 RRF 在应用层实现，无需 ES Platinum/Enterprise 许可证
+8. **地理距离搜索**：依赖 ES 的 `geo_point` 字段类型，查询时自动按距离排序并返回 `distance` 字段（单位：米）
+9. **地理位置数据**：测试数据自动生成北京附近（中心约 39.9042, 116.4074）的随机坐标，范围 ±0.1 度（约 ±11km）

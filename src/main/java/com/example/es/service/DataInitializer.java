@@ -7,6 +7,7 @@ import co.elastic.clients.elasticsearch.indices.CreateIndexResponse;
 import co.elastic.clients.elasticsearch.indices.IndexSettings;
 import com.example.es.config.DeepPaginationProperties;
 import com.example.es.entity.Document;
+import com.example.es.entity.Document.GeoPoint;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -68,6 +69,8 @@ public class DataInitializer implements CommandLineRunner {
                                                     .similarity(co.elastic.clients.elasticsearch._types.mapping.DenseVectorSimilarity.Cosine)
                                                     .index(true)
                                             ))
+                                            // 地理位置字段（用于距离搜索）
+                                            .properties("location", p -> p.geoPoint(g -> g))
                             ).settings(IndexSettings.of(v -> v.maxResultWindow(100).numberOfReplicas("0")))
             );
 
@@ -101,6 +104,7 @@ public class DataInitializer implements CommandLineRunner {
                         .author(authors.get(i % authors.size()))
                         .status(i % 3 == 0 ? 0 : 1)
                         .titleVector(generateRandomVector(vectorDims))
+                        .location(generateRandomLocation(i))
                         .createTime(LocalDateTime.now().minusDays(i))
                         .build();
 
@@ -129,5 +133,17 @@ public class DataInitializer implements CommandLineRunner {
         return IntStream.range(0, dimensions)
                 .mapToObj(i -> random.nextFloat() * 2 - 1) // 范围 [-1, 1]
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 生成随机地理位置（北京附近，中心点约 39.9042, 116.4074）
+     * 使用文档索引作为种子，确保每条数据的坐标不同且可复现
+     */
+    private GeoPoint generateRandomLocation(int seed) {
+        Random random = new Random(seed);
+        // 北京中心坐标 ±0.1度范围（约 ±11km）
+        double lat = 39.9042 + (random.nextDouble() - 0.5) * 0.2;
+        double lon = 116.4074 + (random.nextDouble() - 0.5) * 0.2;
+        return GeoPoint.builder().lat(lat).lon(lon).build();
     }
 }

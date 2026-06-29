@@ -53,6 +53,8 @@ public class IndexController {
                                                 .similarity(co.elastic.clients.elasticsearch._types.mapping.DenseVectorSimilarity.Cosine)
                                                 .index(true)
                                         ))
+                                        // 地理位置字段（用于距离搜索）
+                                        .properties("location", p -> p.geoPoint(g -> g))
                         )
         );
 
